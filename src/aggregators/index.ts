@@ -1,4 +1,6 @@
 import Paraswap from "./paraswap";
+import OneInch from "./oneInch";
+import Totle from "./totle";
 import { QuoteRequest, QuoteResponse, Aggregator } from "./types";
 
 interface AggregatedQuoteResponse extends QuoteResponse {
@@ -12,7 +14,9 @@ class AggregatorAggregator {
   constructor(network: number) {
     this.network = network;
     this.aggregators = {
-      paraswap: new Paraswap(this.network)
+      paraswap: new Paraswap(this.network),
+      oneInch: new OneInch(this.network),
+      totle: new Totle(this.network)
     };
   }
   async fetchQuotes({

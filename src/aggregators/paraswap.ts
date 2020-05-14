@@ -52,6 +52,19 @@ interface TransactionRequest {
   referrer?: string;
 }
 
+function normalizeRequest({ sourceToken, destinationToken, sourceAmount }) {
+  const fixEth = address =>
+    address === "0x0000000000000000000000000000000000000000"
+      ? "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      : address;
+
+  return {
+    sourceAmount,
+    sourceToken: fixEth(sourceToken),
+    destinationToken: fixEth(destinationToken)
+  };
+}
+
 class Paraswap {
   network: number;
   constructor(network: number) {
@@ -73,11 +86,10 @@ class Paraswap {
       )
       .then(resp => resp.data);
   }
-  async fetchQuote({
-    sourceToken,
-    destinationToken,
-    sourceAmount
-  }: QuoteRequest): Promise<QuoteResponse> {
+  async fetchQuote(quoteRequest: QuoteRequest): Promise<QuoteResponse> {
+    const { sourceToken, destinationToken, sourceAmount } = normalizeRequest(
+      quoteRequest
+    );
     const paraswapPrices = await this._fetchParaswapPrices({
       sourceToken,
       destinationToken,

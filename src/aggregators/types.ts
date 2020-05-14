@@ -12,6 +12,6 @@ export interface QuoteResponse {
 }
 
 export interface Aggregator {
-  network: number;
+  network?: number;
   fetchQuote: (x: QuoteRequest) => Promise<QuoteResponse>;
 }
