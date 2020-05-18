@@ -24,38 +24,6 @@ interface DexagQuote {
   };
 }
 
-function normalizeRequest({ sourceToken, destinationToken, sourceAmount }) {
-  const fixEth = address =>
-    address === "0x0000000000000000000000000000000000000000"
-      ? "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-      : address;
-
-  return {
-    sourceAmount,
-    sourceToken: fixEth(sourceToken),
-    destinationToken: fixEth(destinationToken)
-  };
-}
-
-function normalizeResponse({
-  sourceToken,
-  destinationToken,
-  sourceAmount,
-  destinationAmount
-}) {
-  const fixEth = address =>
-    address === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-      ? "0x0000000000000000000000000000000000000000"
-      : address;
-
-  return {
-    sourceAmount,
-    destinationAmount,
-    sourceToken: fixEth(sourceToken),
-    destinationToken: fixEth(destinationToken)
-  };
-}
-
 class DexAg {
   tokensReady: Promise<Token[]>;
   constructor(network: number) {
@@ -67,7 +35,9 @@ class DexAg {
   fetchTokens(): Promise<Token[]> {
     return axios
       .get(`${DEXAG_BASE_URL}/token-list-full`)
-      .then(resp => resp.data);
+      .then(resp =>
+        resp.data.map(t => ({ ...t, address: t.address.toLowerCase() }))
+      );
   }
   async fetchDexagQuote({
     sourceSymbol,
@@ -112,46 +82,32 @@ class DexAg {
     return amount / 10 ** decimals;
   }
   async fetchQuote(quoteRequest: QuoteRequest): Promise<QuoteResponse> {
-    const { sourceToken, destinationToken, sourceAmount } = normalizeRequest(
-      quoteRequest
+    const { sourceToken, destinationToken, sourceAmount } = quoteRequest;
+
+    const sourceSymbol = await this.getTokenSymbolFromAddress(sourceToken);
+    const destinationSymbol = await this.getTokenSymbolFromAddress(
+      destinationToken
+    );
+    const sourceAmountFormatted = await this.getDisplayAmountFromAtomicAmount(
+      sourceAmount,
+      sourceToken
+    );
+    const quote = await this.fetchDexagQuote({
+      sourceSymbol,
+      destinationSymbol,
+      sourceAmountFormatted
+    });
+    const destinationAmount = await this.getAtomicAmountFromDisplayAmount(
+      quote.destinationAmountFormatted,
+      destinationToken
     );
 
-    try {
-      const sourceSymbol = await this.getTokenSymbolFromAddress(sourceToken);
-      const destinationSymbol = await this.getTokenSymbolFromAddress(
-        destinationToken
-      );
-      const sourceAmountFormatted = await this.getDisplayAmountFromAtomicAmount(
-        sourceAmount,
-        sourceToken
-      );
-      const quote = await this.fetchDexagQuote({
-        sourceSymbol,
-        destinationSymbol,
-        sourceAmountFormatted
-      });
-      const destinationAmount = await this.getAtomicAmountFromDisplayAmount(
-        quote.destinationAmountFormatted,
-        destinationToken
-      );
-
-      return normalizeResponse({
-        sourceToken,
-        destinationToken,
-        sourceAmount,
-        destinationAmount
-      });
-    } catch (error) {
-      return {
-        ...normalizeResponse({
-          sourceToken,
-          destinationToken,
-          sourceAmount,
-          destinationAmount: "0"
-        }),
-        error
-      };
-    }
+    return {
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      destinationAmount
+    };
   }
 }
 

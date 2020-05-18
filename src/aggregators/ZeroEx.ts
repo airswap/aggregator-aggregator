@@ -32,19 +32,6 @@ interface ZeroExQuote {
   sources: Array<{ name: string; proportion: string }>;
 }
 
-// function normalizeRequest({ sourceToken, destinationToken, sourceAmount }) {
-//   const fixEth = address =>
-//     address === "0x0000000000000000000000000000000000000000"
-//       ? "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
-//       : address;
-
-//   return {
-//     sourceAmount,
-//     sourceToken: fixEth(sourceToken),
-//     destinationToken: fixEth(destinationToken)
-//   };
-// }
-
 class ZeroEx {
   tokensReady: Promise<Token[]>;
   constructor(network: number) {
@@ -57,7 +44,11 @@ class ZeroEx {
     const tokenResponse: TokenResponse = await axios
       .get(`${ZERO_EX_BASE_URL}/swap/v0/tokens`)
       .then(resp => resp.data);
-    return tokenResponse.records;
+
+    return tokenResponse.records.map(t => ({
+      ...t,
+      address: t.address.toLowerCase()
+    }));
   }
   async fetchQuote(quoteRequest: QuoteRequest): Promise<QuoteResponse> {
     const { sourceToken, destinationToken, sourceAmount } = quoteRequest;

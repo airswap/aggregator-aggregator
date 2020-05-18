@@ -20,6 +20,7 @@ export interface Token {
 
 export interface Aggregator {
   network?: number;
+  tokensReady: Promise<Token[]>;
   fetchTokens: () => Promise<Token[]>;
   fetchQuote: (x: QuoteRequest) => Promise<QuoteResponse>;
 }

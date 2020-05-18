@@ -97,7 +97,7 @@ function App() {
   return (
     <Box pad="large" justify="center" direction="row">
       <Box direction="column">
-        <Heading>Aggregator Aggregator</Heading>
+        <Heading textAlign="center">Aggregator Aggregator</Heading>
         {!fetchingTokens ? (
           <Box align="center" pad="large" direction="column">
             <FormField label="From Amount" htmlFor="from-amount">

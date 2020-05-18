@@ -2,7 +2,7 @@ import _ from "lodash";
 import axios from "axios";
 import { QuoteRequest, QuoteResponse, Token } from "./types";
 
-const TOTLE_BASE_URL = "https://api.1inch.exchange/v1.1";
+const TOTLE_BASE_URL = "https://api.totle.com";
 
 interface TokenResponse {
   [key: string]: Token;
@@ -110,7 +110,10 @@ class Totle {
       .get(`${TOTLE_BASE_URL}/tokens`)
       .then(resp => resp.data);
 
-    return _.values(tokenResponse);
+    return tokenResponse.tokens.map(t => ({
+      ...t,
+      address: t.address.toLowerCase()
+    }));
   }
   async _fetchTotleQuote({
     sourceToken,
@@ -135,29 +138,19 @@ class Totle {
     destinationToken,
     sourceAmount
   }: QuoteRequest): Promise<QuoteResponse> {
-    try {
-      const quote: TotleQuote = await this._fetchTotleQuote({
-        sourceToken,
-        destinationToken,
-        sourceAmount,
-        includeTransaction: false
-      });
+    const quote: TotleQuote = await this._fetchTotleQuote({
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      includeTransaction: false
+    });
 
-      return {
-        sourceToken,
-        destinationToken,
-        sourceAmount,
-        destinationAmount: quote.response.summary[0].destinationAmount
-      };
-    } catch (error) {
-      return {
-        sourceToken,
-        destinationToken,
-        sourceAmount,
-        destinationAmount: "0",
-        error
-      };
-    }
+    return {
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      destinationAmount: quote.response.summary[0].destinationAmount
+    };
   }
 }
 

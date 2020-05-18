@@ -41,38 +41,6 @@ interface TransactionRequest {
   referrer?: string;
 }
 
-function normalizeRequest({ sourceToken, destinationToken, sourceAmount }) {
-  const fixEth = address =>
-    address === "0x0000000000000000000000000000000000000000"
-      ? "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-      : address;
-
-  return {
-    sourceAmount,
-    sourceToken: fixEth(sourceToken),
-    destinationToken: fixEth(destinationToken)
-  };
-}
-
-function normalizeResponse({
-  sourceToken,
-  destinationToken,
-  sourceAmount,
-  destinationAmount
-}) {
-  const fixEth = address =>
-    address === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-      ? "0x0000000000000000000000000000000000000000"
-      : address;
-
-  return {
-    sourceAmount,
-    destinationAmount,
-    sourceToken: fixEth(sourceToken),
-    destinationToken: fixEth(destinationToken)
-  };
-}
-
 class Paraswap {
   tokensReady: Promise<Token[]>;
   network: number;
@@ -85,7 +53,10 @@ class Paraswap {
       .get(`${PARASWAP_BASE_URL}/tokens/${this.network}`)
       .then(resp => resp.data);
 
-    return tokensResponse.tokens;
+    return tokensResponse.tokens.map(t => ({
+      ...t,
+      address: t.address.toLowerCase()
+    }));
   }
   _fetchParaswapPrices({
     sourceToken,
@@ -101,33 +72,20 @@ class Paraswap {
       .then(resp => resp.data);
   }
   async fetchQuote(quoteRequest: QuoteRequest): Promise<QuoteResponse> {
-    const { sourceToken, destinationToken, sourceAmount } = normalizeRequest(
-      quoteRequest
-    );
-    try {
-      const paraswapPrices = await this._fetchParaswapPrices({
-        sourceToken,
-        destinationToken,
-        sourceAmount
-      });
+    const { sourceToken, destinationToken, sourceAmount } = quoteRequest;
 
-      return normalizeResponse({
-        sourceToken,
-        destinationToken,
-        sourceAmount,
-        destinationAmount: paraswapPrices.priceRoute.amount
-      });
-    } catch (error) {
-      return {
-        ...normalizeResponse({
-          sourceToken,
-          destinationToken,
-          sourceAmount,
-          destinationAmount: "0"
-        }),
-        error
-      };
-    }
+    const paraswapPrices = await this._fetchParaswapPrices({
+      sourceToken,
+      destinationToken,
+      sourceAmount
+    });
+
+    return {
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      destinationAmount: paraswapPrices.priceRoute.amount
+    };
   }
   async buildTransaction({
     sourceToken,

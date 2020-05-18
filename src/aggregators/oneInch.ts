@@ -25,38 +25,6 @@ interface OneInchQuote {
   exchanges: Array<{ name: string; part: number }>;
 }
 
-function normalizeRequest({ sourceToken, destinationToken, sourceAmount }) {
-  const fixEth = address =>
-    address === "0x0000000000000000000000000000000000000000"
-      ? "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-      : address;
-
-  return {
-    sourceAmount,
-    sourceToken: fixEth(sourceToken),
-    destinationToken: fixEth(destinationToken)
-  };
-}
-
-function normalizeResponse({
-  sourceToken,
-  destinationToken,
-  sourceAmount,
-  destinationAmount
-}) {
-  const fixEth = address =>
-    address === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-      ? "0x0000000000000000000000000000000000000000"
-      : address;
-
-  return {
-    sourceAmount,
-    destinationAmount,
-    sourceToken: fixEth(sourceToken),
-    destinationToken: fixEth(destinationToken)
-  };
-}
-
 class OneInch {
   tokensReady: Promise<Token[]>;
   constructor(network: number) {
@@ -69,36 +37,25 @@ class OneInch {
     const tokenResponse: TokenResponse = await axios
       .get(`${ONE_INCH_BASE_URL}/tokens`)
       .then(resp => resp.data);
-    return _.values(tokenResponse);
+    return _.values(tokenResponse).map(t => ({
+      ...t,
+      address: t.address.toLowerCase()
+    }));
   }
   async fetchQuote(quoteRequest: QuoteRequest): Promise<QuoteResponse> {
-    const { sourceToken, destinationToken, sourceAmount } = normalizeRequest(
-      quoteRequest
-    );
-    try {
-      const quote: OneInchQuote = await axios
-        .get(
-          `${ONE_INCH_BASE_URL}/quote?fromTokenAddress=${sourceToken}&toTokenAddress=${destinationToken}&amount=${sourceAmount}&disableEstimate=false&slippage=1`
-        )
-        .then(resp => resp.data);
+    const { sourceToken, destinationToken, sourceAmount } = quoteRequest;
+    const quote: OneInchQuote = await axios
+      .get(
+        `${ONE_INCH_BASE_URL}/quote?fromTokenAddress=${sourceToken}&toTokenAddress=${destinationToken}&amount=${sourceAmount}&disableEstimate=false&slippage=1`
+      )
+      .then(resp => resp.data);
 
-      return normalizeResponse({
-        sourceToken,
-        destinationToken,
-        sourceAmount,
-        destinationAmount: quote.toTokenAmount
-      });
-    } catch (error) {
-      return {
-        ...normalizeResponse({
-          sourceToken,
-          destinationToken,
-          sourceAmount,
-          destinationAmount: "0"
-        }),
-        error
-      };
-    }
+    return {
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      destinationAmount: quote.toTokenAmount
+    };
   }
 }
 

@@ -5,6 +5,7 @@ import Totle from "./totle";
 import Dexag from "./dexag";
 import ZeroEx from "./ZeroEx";
 import { QuoteRequest, QuoteResponse, Aggregator, Token } from "./types";
+import { normalizeRequest, normalizeResponse } from "./utils";
 
 interface AggregatedQuoteResponse extends QuoteResponse {
   fetchTime: number;
@@ -56,7 +57,22 @@ class AggregatorAggregator {
       return _.find(_.flatten(tokensCleaned), t => t.address === address);
     });
 
-    return _.uniqBy([ETH, ...commonTokens], "address");
+    return _.uniqBy(
+      [ETH, ...commonTokens.filter(t => t.symbol !== "ETH")],
+      "address"
+    );
+  }
+  async validateRequestTokensForAgg({ sourceToken, destinationToken }, aggKey) {
+    const tokens = await this.aggregators[aggKey].tokensReady;
+
+    if (!_.find(tokens, { address: sourceToken })) {
+      if (aggKey === "totle") {
+        debugger;
+      }
+      throw new Error(`Source token not supported`);
+    } else if (!_.find(tokens, { address: destinationToken })) {
+      throw new Error(`Destination token not supported`);
+    }
   }
   async fetchQuotes({
     sourceToken,
@@ -67,11 +83,30 @@ class AggregatorAggregator {
     return Promise.all(
       keys.map(async aggKey => {
         const startTime = Date.now();
-        const quote = await this.aggregators[aggKey].fetchQuote({
-          sourceToken,
-          destinationToken,
-          sourceAmount
-        });
+        let quote;
+        try {
+          const normalizedRequest = normalizeRequest(
+            {
+              sourceToken,
+              destinationToken,
+              sourceAmount
+            },
+            aggKey
+          );
+          await this.validateRequestTokensForAgg(normalizedRequest, aggKey);
+          quote = normalizeResponse(
+            await this.aggregators[aggKey].fetchQuote(normalizedRequest),
+            aggKey
+          );
+        } catch (error) {
+          quote = {
+            sourceToken,
+            destinationToken,
+            sourceAmount,
+            error
+          };
+        }
+
         return {
           ...quote,
           fetchTime: Date.now() - startTime,
