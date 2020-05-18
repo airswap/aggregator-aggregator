@@ -1,18 +1,7 @@
 import axios from "axios";
-import { QuoteRequest, QuoteResponse } from "./types";
+import { QuoteRequest, QuoteResponse, Token } from "./types";
 
 const PARASWAP_BASE_URL = "https://paraswap.io/api/v1";
-
-// fetchTokens types
-interface Token {
-  decimals: number;
-  symbol: string;
-  address: string;
-}
-
-interface TokenResponse {
-  tokens: Token[];
-}
 
 // fetchPrices types
 
@@ -65,13 +54,38 @@ function normalizeRequest({ sourceToken, destinationToken, sourceAmount }) {
   };
 }
 
+function normalizeResponse({
+  sourceToken,
+  destinationToken,
+  sourceAmount,
+  destinationAmount
+}) {
+  const fixEth = address =>
+    address === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ? "0x0000000000000000000000000000000000000000"
+      : address;
+
+  return {
+    sourceAmount,
+    destinationAmount,
+    sourceToken: fixEth(sourceToken),
+    destinationToken: fixEth(destinationToken)
+  };
+}
+
 class Paraswap {
+  tokensReady: Promise<Token[]>;
   network: number;
   constructor(network: number) {
     this.network = network;
+    this.tokensReady = this.fetchTokens();
   }
-  fetchTokens(): Promise<TokenResponse> {
-    return axios.get(`${PARASWAP_BASE_URL}/tokens/${this.network}`);
+  async fetchTokens(): Promise<Token[]> {
+    const tokensResponse: { tokens: Token[] } = await axios
+      .get(`${PARASWAP_BASE_URL}/tokens/${this.network}`)
+      .then(resp => resp.data);
+
+    return tokensResponse.tokens;
   }
   _fetchParaswapPrices({
     sourceToken,
@@ -90,18 +104,30 @@ class Paraswap {
     const { sourceToken, destinationToken, sourceAmount } = normalizeRequest(
       quoteRequest
     );
-    const paraswapPrices = await this._fetchParaswapPrices({
-      sourceToken,
-      destinationToken,
-      sourceAmount
-    });
+    try {
+      const paraswapPrices = await this._fetchParaswapPrices({
+        sourceToken,
+        destinationToken,
+        sourceAmount
+      });
 
-    return {
-      sourceToken,
-      destinationToken,
-      sourceAmount,
-      destinationAmount: paraswapPrices.priceRoute.amount
-    };
+      return normalizeResponse({
+        sourceToken,
+        destinationToken,
+        sourceAmount,
+        destinationAmount: paraswapPrices.priceRoute.amount
+      });
+    } catch (error) {
+      return {
+        ...normalizeResponse({
+          sourceToken,
+          destinationToken,
+          sourceAmount,
+          destinationAmount: "0"
+        }),
+        error
+      };
+    }
   }
   async buildTransaction({
     sourceToken,

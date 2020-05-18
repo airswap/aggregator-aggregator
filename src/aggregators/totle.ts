@@ -1,17 +1,11 @@
+import _ from "lodash";
 import axios from "axios";
-import { QuoteRequest, QuoteResponse } from "./types";
+import { QuoteRequest, QuoteResponse, Token } from "./types";
 
 const TOTLE_BASE_URL = "https://api.1inch.exchange/v1.1";
 
-// fetchTokens types
-interface Token {
-  decimals: number;
-  symbol: string;
-  address: string;
-}
-
 interface TokenResponse {
-  tokens: Token[];
+  [key: string]: Token;
 }
 
 // fetchQuote types
@@ -104,13 +98,19 @@ function buildTotleRequest({
 }
 
 class Totle {
+  tokensReady: Promise<Token[]>;
   constructor(network: number) {
     if (network !== 1) {
       throw new Error("only mainnet is supported");
     }
+    this.tokensReady = this.fetchTokens();
   }
-  fetchTokens(): Promise<TokenResponse> {
-    return axios.get(`${TOTLE_BASE_URL}/tokens`);
+  async fetchTokens(): Promise<Token[]> {
+    const tokenResponse = await axios
+      .get(`${TOTLE_BASE_URL}/tokens`)
+      .then(resp => resp.data);
+
+    return _.values(tokenResponse);
   }
   async _fetchTotleQuote({
     sourceToken,
@@ -135,19 +135,29 @@ class Totle {
     destinationToken,
     sourceAmount
   }: QuoteRequest): Promise<QuoteResponse> {
-    const quote: TotleQuote = await this._fetchTotleQuote({
-      sourceToken,
-      destinationToken,
-      sourceAmount,
-      includeTransaction: false
-    });
+    try {
+      const quote: TotleQuote = await this._fetchTotleQuote({
+        sourceToken,
+        destinationToken,
+        sourceAmount,
+        includeTransaction: false
+      });
 
-    return {
-      sourceToken,
-      destinationToken,
-      sourceAmount,
-      destinationAmount: quote.response.summary[0].destinationAmount
-    };
+      return {
+        sourceToken,
+        destinationToken,
+        sourceAmount,
+        destinationAmount: quote.response.summary[0].destinationAmount
+      };
+    } catch (error) {
+      return {
+        sourceToken,
+        destinationToken,
+        sourceAmount,
+        destinationAmount: "0",
+        error
+      };
+    }
   }
 }
 
