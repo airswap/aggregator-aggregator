@@ -1,6 +1,5 @@
 import _ from "lodash";
 import React, { useState, useEffect } from "react";
-import bn from "bignumber.js";
 import Spinner from "./Spinner";
 import ReactDOM from "react-dom";
 
@@ -15,31 +14,25 @@ import {
   TextInput
 } from "grommet";
 import Aggregator from "./aggregators";
+import {
+  getAtomicAmountFromDisplayAmount,
+  getDisplayAmountFromAtomicAmount,
+  getTokenAddressFromSymbol,
+  addMarkupToQuotes
+} from "./utils";
+import Web3 from "web3";
 
 const aggregator = new Aggregator(1);
 
-// const tokenSymbols = tokens.map(({ symbol }) => symbol);
-
-function getTokenAddressFromSymbol(tokenSymbol, tokens) {
-  return tokens.find(({ symbol }) => symbol === tokenSymbol).address;
-}
-function getAtomicAmountFromDisplayAmount(amount, tokenAddress, tokens) {
-  const { decimals } = tokens.find(
-    ({ address }) => address.toLowerCase() === tokenAddress.toLowerCase()
-  );
-  return new bn(amount).times(10 ** decimals).toString();
-}
-
-function getDisplayAmountFromAtomicAmount(amount, tokenAddress, tokens) {
-  const token = tokens.find(
-    ({ address }) => address.toLowerCase() === tokenAddress.toLowerCase()
-  );
-  const { decimals } = token;
-
-  return new bn(amount).dividedBy(10 ** decimals).toFixed(4);
-}
+const amountDefault = "0.0001";
+const fromDefault = "ETH";
+const toDefault = "USDC";
 
 function App() {
+  const [walletAddress, setWalletAddress] = useState("");
+  const [slippage, setSlippage] = useState(1);
+  const [web3, setWeb3] = useState(null);
+  const [walletError, setWalletError] = useState("");
   const [quotes, setQuotes] = useState([]);
   const [tokens, setTokens] = useState([]);
 
@@ -48,11 +41,19 @@ function App() {
 
   const [errorFetchingQuotes, setErrorFetchingQuotes] = useState("");
   const [errorFetchingTokens, setErrorFetchingTokens] = useState("");
-  const [fromSymbol, setFromSymbol] = useState("");
-  const [toSymbol, setToSymbol] = useState("");
-  const [fromAmount, setFromAmount] = useState("");
+  const [fromSymbol, setFromSymbol] = useState(fromDefault);
+  const [toSymbol, setToSymbol] = useState(toDefault);
+  const [fromAmount, setFromAmount] = useState(amountDefault);
 
   useEffect(() => {
+    window.ethereum
+      .enable()
+      .then(([address]) => {
+        setWeb3(new Web3(window.ethereum));
+        setWalletAddress(address);
+      })
+      .catch(err => setWalletError(err.message));
+
     setFetchingTokens(true);
     aggregator.tokensReady
       .then(tokens => {
@@ -79,12 +80,14 @@ function App() {
 
     try {
       await aggregator
-        .fetchQuotes({
+        .fetchTrades({
           sourceAmount,
           sourceToken,
-          destinationToken
+          destinationToken,
+          userAddress: walletAddress,
+          slippage
         })
-        .then(response => setQuotes(response));
+        .then(response => setQuotes(addMarkupToQuotes(response)));
     } catch (e) {
       setFetchingQuotes(false);
       setErrorFetchingQuotes(e.message);
@@ -98,6 +101,7 @@ function App() {
     <Box pad="large" justify="center" direction="row">
       <Box direction="column">
         <Heading textAlign="center">Aggregator Aggregator</Heading>
+        {walletError}
         {!fetchingTokens ? (
           <Box align="center" pad="large" direction="column">
             <FormField label="From Amount" htmlFor="from-amount">
@@ -134,6 +138,17 @@ function App() {
                 }}
                 onSelect={event => setToSymbol(event.suggestion)}
                 suggestions={tokenSymbols.filter(t => t.includes(toSymbol))}
+              />
+            </FormField>
+            <FormField label="Max Slippage %" htmlFor="slippage">
+              <TextInput
+                id="slippage"
+                placeholder="1"
+                value={slippage}
+                type="number"
+                onChange={({ target: { value } }) => {
+                  setSlippage(Number(value));
+                }}
               />
             </FormField>
           </Box>
@@ -193,13 +208,44 @@ function App() {
                 },
                 {
                   property: "fetchTime",
-
                   header: "Fetch Time (s)",
+                  render: datum => {
+                    return datum.error ? (
+                      "N/A"
+                    ) : (
+                      <Text>{datum.fetchTime / 1000}</Text>
+                    );
+                  }
+                },
+                {
+                  property: "markup",
+                  header: "Markup",
+                  render: datum => {
+                    return datum.error ? "N/A" : <Text>{datum.markup}</Text>;
+                  }
+                },
+                {
+                  property: "action",
+                  header: "Action",
                   render: datum => {
                     return datum.error ? (
                       <Text size="xsmall">{datum.error.message}</Text>
                     ) : (
-                      <Text>{datum.fetchTime / 1000}</Text>
+                      <Button
+                        onClick={() => {
+                          const txObject = {
+                            from: walletAddress,
+                            to: datum.to,
+                            value: datum.value,
+                            data: datum.data
+                          };
+                          web3.eth
+                            .sendTransaction(txObject)
+                            .then(resp => console.log(resp))
+                            .catch(resp => console.log(resp));
+                        }}
+                        label="Trade"
+                      />
                     );
                   }
                 }

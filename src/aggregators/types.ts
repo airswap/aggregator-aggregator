@@ -23,4 +23,20 @@ export interface Aggregator {
   tokensReady: Promise<Token[]>;
   fetchTokens: () => Promise<Token[]>;
   fetchQuote: (x: QuoteRequest) => Promise<QuoteResponse>;
+  fetchTrade: (x: TradeRequest) => Promise<TradeResponse>;
+}
+
+export interface TradeRequest extends QuoteRequest {
+  userAddress: string;
+  slippage: number;
+}
+
+export interface TradeResponse extends QuoteResponse {
+  from: string;
+  to: string;
+  value: string;
+  data: string;
+  // chainId: number;
+  // gasPrice: string;
+  // gas: number;
 }

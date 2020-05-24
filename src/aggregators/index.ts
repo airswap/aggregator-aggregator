@@ -3,11 +3,24 @@ import Paraswap from "./paraswap";
 import OneInch from "./oneInch";
 import Totle from "./totle";
 import Dexag from "./dexag";
-import ZeroEx from "./ZeroEx";
-import { QuoteRequest, QuoteResponse, Aggregator, Token } from "./types";
-import { normalizeRequest, normalizeResponse } from "./utils";
+// import ZeroEx from "./ZeroEx";
+
+import {
+  QuoteRequest,
+  QuoteResponse,
+  Aggregator,
+  Token,
+  TradeRequest,
+  TradeResponse
+} from "./types";
+import { normalizeRequestTokens, normalizeResponseTokens } from "./utils";
 
 interface AggregatedQuoteResponse extends QuoteResponse {
+  fetchTime: number;
+  aggregator: string;
+}
+
+interface AggregatedTradeResponse extends TradeResponse {
   fetchTime: number;
   aggregator: string;
 }
@@ -28,8 +41,8 @@ class AggregatorAggregator {
       paraswap: new Paraswap(this.network),
       oneInch: new OneInch(this.network),
       totle: new Totle(this.network),
-      dexag: new Dexag(this.network),
-      zeroEx: new ZeroEx(this.network)
+      dexag: new Dexag(this.network)
+      // zeroEx: new ZeroEx(this.network)
     };
     this.tokensReady = this.processTokensReadyPromises();
   }
@@ -74,6 +87,62 @@ class AggregatorAggregator {
       throw new Error(`Destination token not supported`);
     }
   }
+  async fetchTrades({
+    sourceToken,
+    destinationToken,
+    sourceAmount,
+    userAddress,
+    slippage
+  }: TradeRequest): Promise<AggregatedTradeResponse[]> {
+    const keys = Object.keys(this.aggregators);
+    return Promise.all(
+      keys.map(async aggKey => {
+        const startTime = Date.now();
+        let quote;
+        try {
+          const normalizedRequest = {
+            sourceAmount,
+            userAddress,
+            slippage,
+            ...normalizeRequestTokens(
+              {
+                sourceToken,
+                destinationToken
+              },
+              aggKey
+            )
+          };
+          await this.validateRequestTokensForAgg(normalizedRequest, aggKey);
+          const quoteResponse = await this.aggregators[aggKey].fetchTrade(
+            normalizedRequest
+          );
+          quote = {
+            ...quoteResponse,
+            ...normalizeResponseTokens(
+              {
+                sourceToken: quoteResponse.sourceToken,
+                destinationToken: quoteResponse.destinationToken
+              },
+              aggKey
+            )
+          };
+        } catch (error) {
+          quote = {
+            sourceToken,
+            destinationToken,
+            sourceAmount,
+            error
+          };
+        }
+
+        return {
+          ...quote,
+          fetchTime: Date.now() - startTime,
+          aggregator: aggKey
+        };
+      })
+    );
+  }
   async fetchQuotes({
     sourceToken,
     destinationToken,
@@ -85,19 +154,30 @@ class AggregatorAggregator {
         const startTime = Date.now();
         let quote;
         try {
-          const normalizedRequest = normalizeRequest(
-            {
-              sourceToken,
-              destinationToken,
-              sourceAmount
-            },
-            aggKey
-          );
+          const normalizedRequest = {
+            sourceAmount,
+            ...normalizeRequestTokens(
+              {
+                sourceToken,
+                destinationToken
+              },
+              aggKey
+            )
+          };
           await this.validateRequestTokensForAgg(normalizedRequest, aggKey);
-          quote = normalizeResponse(
-            await this.aggregators[aggKey].fetchQuote(normalizedRequest),
-            aggKey
+          const quoteResponse = await this.aggregators[aggKey].fetchQuote(
+            normalizedRequest
           );
+          quote = {
+            ...quoteResponse,
+            ...normalizeResponseTokens(
+              {
+                sourceToken: quoteResponse.sourceToken,
+                destinationToken: quoteResponse.destinationToken
+              },
+              aggKey
+            )
+          };
         } catch (error) {
           quote = {
             sourceToken,

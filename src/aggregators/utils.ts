@@ -6,37 +6,28 @@ const ethAddressByAggregator = {
   zeroEx: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 };
 
-function normalizeRequest(
-  { sourceToken, destinationToken, sourceAmount },
-  aggKey
-) {
+function normalizeRequestTokens({ sourceToken, destinationToken }, aggKey) {
   const fixEth = address =>
     address === "0x0000000000000000000000000000000000000000"
       ? ethAddressByAggregator[aggKey]
       : address;
 
   return {
-    sourceAmount,
     sourceToken: fixEth(sourceToken),
     destinationToken: fixEth(destinationToken)
   };
 }
 
-function normalizeResponse(
-  { sourceToken, destinationToken, sourceAmount, destinationAmount },
-  aggKey
-) {
+function normalizeResponseTokens({ sourceToken, destinationToken }, aggKey) {
   const fixEth = address =>
     address === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       ? "0x0000000000000000000000000000000000000000"
       : address;
 
   return {
-    sourceAmount,
-    destinationAmount,
     sourceToken: fixEth(sourceToken),
     destinationToken: fixEth(destinationToken)
   };
 }
 
-export { normalizeRequest, normalizeResponse };
+export { normalizeRequestTokens, normalizeResponseTokens };

@@ -1,6 +1,13 @@
 import _ from "lodash";
 import axios from "axios";
-import { QuoteRequest, QuoteResponse } from "./types";
+import qs from "query-string";
+
+import {
+  QuoteRequest,
+  QuoteResponse,
+  TradeRequest,
+  TradeResponse
+} from "./types";
 
 const ONE_INCH_BASE_URL = "https://api.1inch.exchange/v1.1";
 
@@ -23,6 +30,18 @@ interface OneInchQuote {
   toTokenAmount: string;
   fromTokenAmount: string;
   exchanges: Array<{ name: string; part: number }>;
+}
+
+interface OneInchSwapQuote {
+  fromToken: Token;
+  toToken: Token;
+  toTokenAmount: string;
+  fromTokenAmount: string;
+  exchanges: Array<{ name: string; part: number }>;
+  from: string;
+  to: string;
+  data: string;
+  value: string;
 }
 
 class OneInch {
@@ -55,6 +74,37 @@ class OneInch {
       destinationToken,
       sourceAmount,
       destinationAmount: quote.toTokenAmount
+    };
+  }
+  async fetchTrade({
+    sourceToken,
+    destinationToken,
+    sourceAmount,
+    userAddress,
+    slippage
+  }: TradeRequest): Promise<TradeResponse> {
+    const query = {
+      fromTokenAddress: sourceToken,
+      toTokenAddress: destinationToken,
+      amount: sourceAmount,
+      fromAddress: userAddress,
+      slippage,
+      disableEstimate: true
+    };
+    const quote: OneInchSwapQuote = await axios
+      .get(`${ONE_INCH_BASE_URL}/swap?${qs.stringify(query)}`)
+      .then(resp => resp.data);
+
+    const { to, data, value, toTokenAmount } = quote;
+    return {
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      destinationAmount: toTokenAmount,
+      to,
+      data,
+      value,
+      from: userAddress
     };
   }
 }

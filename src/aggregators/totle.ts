@@ -1,6 +1,12 @@
 import _ from "lodash";
 import axios from "axios";
-import { QuoteRequest, QuoteResponse, Token } from "./types";
+import {
+  QuoteRequest,
+  QuoteResponse,
+  Token,
+  TradeRequest,
+  TradeResponse
+} from "./types";
 
 const TOTLE_BASE_URL = "https://api.totle.com";
 
@@ -12,6 +18,8 @@ interface TokenResponse {
 
 interface TotleQuoteRequest extends QuoteRequest {
   includeTransaction: boolean;
+  slippage?: number;
+  userAddress?: string;
 }
 
 interface TotleTradeOrder {
@@ -74,6 +82,7 @@ interface TotleQuote {
       blockNumber: number;
       estimatedTimestamp: number;
     };
+    transactions: any;
   };
 }
 
@@ -81,19 +90,30 @@ function buildTotleRequest({
   sourceToken,
   destinationToken,
   sourceAmount,
-  includeTransaction
+  includeTransaction,
+  slippage,
+  userAddress
 }) {
   return {
-    swap: {
-      sourceAsset: sourceToken,
-      destinationAsset: destinationToken,
-      sourceAmount: sourceAmount,
-      maxMarketSlippagePercent: "10",
-      maxExecutionSlippagePercent: "3"
-    },
+    swaps: [
+      {
+        sourceAsset: sourceToken,
+        destinationAsset: destinationToken,
+        sourceAmount: sourceAmount,
+        // maxMarketSlippagePercent: "10",
+        maxExecutionSlippagePercent: `${slippage}`
+      }
+    ],
     config: {
+      strategy: {
+        main: "curves",
+        backup: "curves"
+      },
+      skipBalanceChecks: false,
       transactions: includeTransaction
-    }
+    },
+    address: userAddress,
+    apiKey: "41a14d82-36b0-457e-8c16-b86f2f19d094"
   };
 }
 
@@ -119,18 +139,21 @@ class Totle {
     sourceToken,
     destinationToken,
     sourceAmount,
-    includeTransaction
+    includeTransaction,
+    slippage,
+    userAddress
   }: TotleQuoteRequest): Promise<TotleQuote> {
+    const totleRequest = buildTotleRequest({
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      includeTransaction,
+      userAddress,
+      slippage
+    });
+
     return await axios
-      .post(
-        "https://api.totle.com/swap",
-        buildTotleRequest({
-          sourceToken,
-          destinationToken,
-          sourceAmount,
-          includeTransaction
-        })
-      )
+      .post("https://api.totle.com/swap", totleRequest)
       .then(resp => resp.data);
   }
   async fetchQuote({
@@ -150,6 +173,37 @@ class Totle {
       destinationToken,
       sourceAmount,
       destinationAmount: quote.response.summary[0].destinationAmount
+    };
+  }
+  async fetchTrade({
+    sourceToken,
+    destinationToken,
+    sourceAmount,
+    userAddress,
+    slippage
+  }: TradeRequest): Promise<TradeResponse> {
+    const quote: TotleQuote = await this._fetchTotleQuote({
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      includeTransaction: true,
+      slippage,
+      userAddress
+    });
+
+    const { to, data, value } = quote.response.transactions.find(
+      t => t.type === "swap"
+    ).tx;
+
+    return {
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      destinationAmount: quote.response.summary[0].destinationAmount,
+      from: userAddress,
+      to,
+      data,
+      value
     };
   }
 }

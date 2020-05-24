@@ -1,5 +1,12 @@
 import axios from "axios";
-import { QuoteRequest, QuoteResponse, Token } from "./types";
+import bn from "bignumber.js";
+import {
+  QuoteRequest,
+  QuoteResponse,
+  Token,
+  TradeRequest,
+  TradeResponse
+} from "./types";
 
 const PARASWAP_BASE_URL = "https://paraswap.io/api/v1";
 
@@ -9,7 +16,12 @@ interface Route {
   exchange: string;
   percent: string;
   srcAmount: string;
-  destAmount: string;
+  amount: string;
+  data: {
+    exchange: string;
+    tokenFrom: string;
+    tokenTo: string;
+  };
 }
 
 interface Other {
@@ -26,19 +38,15 @@ interface ParaswapPricesResponse {
   };
 }
 
-// buildTransaction types
-
 interface TransactionRequest {
-  priceRoute: {
-    bestRoute: Route[];
-  };
+  priceRoute: any;
   srcToken: string;
   destToken: string;
   srcAmount: string;
   destAmount: string;
   userAddress: string;
-  payTo?: string;
-  referrer?: string;
+  payTo: string;
+  referrer: string;
 }
 
 class Paraswap {
@@ -87,31 +95,50 @@ class Paraswap {
       destinationAmount: paraswapPrices.priceRoute.amount
     };
   }
-  async buildTransaction({
+  async fetchTrade({
     sourceToken,
     destinationToken,
     sourceAmount,
-    userAddress
-  }) {
+    userAddress,
+    slippage
+  }: TradeRequest): Promise<TradeResponse> {
     const bestPrice = await this._fetchParaswapPrices({
       sourceToken,
       destinationToken,
       sourceAmount
     });
+
+    const slippageCalc = 1 + slippage / 100;
+    const newDestinationAmount = new bn(bestPrice.priceRoute.amount)
+      .div(slippageCalc)
+      .toString();
     const transactionRequest: TransactionRequest = {
-      priceRoute: {
-        bestRoute: bestPrice.priceRoute.bestRoute
-      },
+      priceRoute: bestPrice.priceRoute,
       srcToken: sourceToken,
       destToken: destinationToken,
       srcAmount: sourceAmount,
-      destAmount: bestPrice.priceRoute.amount,
-      userAddress
+      destAmount: newDestinationAmount,
+      userAddress,
+      referrer: "airswap.io",
+      payTo: ""
     };
-    return axios.post(
-      `${PARASWAP_BASE_URL}/transactions/${this.network}`,
-      transactionRequest
-    );
+    const transactionResponse = await axios
+      .post(
+        `${PARASWAP_BASE_URL}/transactions/${this.network}`,
+        transactionRequest
+      )
+      .then(resp => resp.data);
+    const { from, to, value, data } = transactionResponse;
+    return {
+      from,
+      to,
+      value,
+      data,
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      destinationAmount: bestPrice.priceRoute.amount
+    };
   }
 }
 
