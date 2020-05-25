@@ -29,10 +29,12 @@ const gas = new Gas();
 
 const aggregator = new Aggregator(1);
 
-const amountDefault = "100";
-const fromDefault = "DAI";
-const toDefault = "USDC";
-const slippageDefault = 2;
+const amountDefault = "1";
+const fromDefault = "USDC";
+const toDefault = "DAI";
+const slippageDefault = 3;
+
+const gasSetting = "fast";
 
 function App() {
   const [walletAddress, setWalletAddress] = useState("");
@@ -84,10 +86,11 @@ function App() {
       sourceToken,
       tokens
     );
-    const balance = (await getERC20BalanceOf(
-      sourceToken,
-      walletAddress
-    )).toString();
+    const balance =
+      sourceToken === "0x0000000000000000000000000000000000000000"
+        ? await web3.eth.getBalance(walletAddress)
+        : (await getERC20BalanceOf(sourceToken, walletAddress)).toString();
+
     const balanceFormatted = getDisplayAmountFromAtomicAmount(
       balance,
       sourceToken,
@@ -95,7 +98,7 @@ function App() {
     );
     const sufficientBalance = Number(balanceFormatted) >= Number(fromAmount);
     setSufficientBalance(sufficientBalance);
-    debugger;
+
     const quotesPromise = sufficientBalance
       ? aggregator.fetchTrades(
           {
@@ -186,7 +189,10 @@ function App() {
             {datum.approvalNeeded ? (
               <TransactionButton
                 transactionFn={async () => {
-                  const approvalTx = await datum.approvalNeeded();
+                  const { gasPrice } = await gas.getGasSettingsForTransaction(
+                    gasSetting
+                  );
+                  const approvalTx = await datum.approvalNeeded({ gasPrice });
                   const approvalPromise = approvalTx.wait();
                   approvalPromise.then(() => fetchQuotes());
                   return approvalPromise;
@@ -198,7 +204,7 @@ function App() {
                 label="Trade"
                 transactionFn={async () => {
                   const { gasPrice } = await gas.getGasSettingsForTransaction(
-                    "fastest"
+                    gasSetting
                   );
                   const txObject = {
                     from: walletAddress,

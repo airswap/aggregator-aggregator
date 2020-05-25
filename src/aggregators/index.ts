@@ -1,4 +1,5 @@
-import { checkApproval, approveToken } from "airswap.js/src/erc20";
+import { checkApproval, getERC20Contract } from "airswap.js/src/erc20";
+import { TOKEN_APPROVAL_AMOUNT } from "airswap.js/src/constants";
 import * as ethers from "ethers";
 import { getContractAddressesForChainOrThrow } from "@0x/contract-addresses";
 import _ from "lodash";
@@ -17,6 +18,11 @@ import {
   TradeResponse
 } from "./types";
 import { normalizeRequestTokens, normalizeResponseTokens } from "./utils";
+
+function approveToken(tokenAddress, spender, signer, options = {}) {
+  const contract = getERC20Contract(tokenAddress, signer);
+  return contract.approve(spender, TOKEN_APPROVAL_AMOUNT, { ...options });
+}
 
 interface AggregatedQuoteResponse extends QuoteResponse {
   fetchTime: number;
@@ -157,10 +163,23 @@ class AggregatorAggregator {
     const signer = provider.getSigner();
     const approvalsNeeded = await Promise.all(
       trades.map(async trade => {
-        const spender =
-          trade.aggregator === "zeroEx"
-            ? getContractAddressesForChainOrThrow(1).erc20Proxy
-            : trade.to;
+        if (trade.sourceToken === ETH.address || trade.error) {
+          return null;
+        }
+        const spender = (N => {
+          switch (N) {
+            case "zeroEx":
+              return getContractAddressesForChainOrThrow(1).erc20Proxy;
+            case "totle":
+              return "0x74758acfce059f503a7e6b0fc2c8737600f9f2c4";
+            case "oneInch":
+              return "0xe4c9194962532feb467dce8b3d42419641c6ed2e";
+            case "dexag":
+              return "0xccaf8533b6822a6c17b1059dda13c168e75544a4";
+            default:
+              return trade.to;
+          }
+        })(trade.aggregator);
 
         const isApproved = await checkApproval(
           trade.sourceToken,
@@ -169,7 +188,8 @@ class AggregatorAggregator {
         );
 
         if (!isApproved) {
-          return () => approveToken(trade.sourceToken, spender, signer);
+          return (options = {}) =>
+            approveToken(trade.sourceToken, spender, signer, options);
         } else {
           return null;
         }
