@@ -2,6 +2,7 @@ import _ from "lodash";
 import React, { useState, useEffect } from "react";
 import Spinner from "./Spinner";
 import ReactDOM from "react-dom";
+import { getERC20BalanceOf } from "airswap.js/src/erc20/contractFunctions";
 
 import {
   Grommet,
@@ -21,16 +22,21 @@ import {
   addMarkupToQuotes
 } from "./utils";
 import Web3 from "web3";
+import TransactionButton from "./TransactionButton";
+import { Gas } from "./gas";
+
+const gas = new Gas();
 
 const aggregator = new Aggregator(1);
 
-const amountDefault = "0.0001";
-const fromDefault = "ETH";
+const amountDefault = "100";
+const fromDefault = "DAI";
 const toDefault = "USDC";
+const slippageDefault = 2;
 
 function App() {
   const [walletAddress, setWalletAddress] = useState("");
-  const [slippage, setSlippage] = useState(1);
+  const [slippage, setSlippage] = useState(slippageDefault);
   const [web3, setWeb3] = useState(null);
   const [walletError, setWalletError] = useState("");
   const [quotes, setQuotes] = useState([]);
@@ -44,6 +50,7 @@ function App() {
   const [fromSymbol, setFromSymbol] = useState(fromDefault);
   const [toSymbol, setToSymbol] = useState(toDefault);
   const [fromAmount, setFromAmount] = useState(amountDefault);
+  const [sufficientBalance, setSufficientBalance] = useState(false);
 
   useEffect(() => {
     window.ethereum
@@ -77,17 +84,38 @@ function App() {
       sourceToken,
       tokens
     );
-
-    try {
-      await aggregator
-        .fetchTrades({
+    const balance = (await getERC20BalanceOf(
+      sourceToken,
+      walletAddress
+    )).toString();
+    const balanceFormatted = getDisplayAmountFromAtomicAmount(
+      balance,
+      sourceToken,
+      tokens
+    );
+    const sufficientBalance = Number(balanceFormatted) >= Number(fromAmount);
+    setSufficientBalance(sufficientBalance);
+    const quotesPromise = sufficientBalance
+      ? aggregator.fetchTrades(
+          {
+            sourceAmount,
+            sourceToken,
+            destinationToken,
+            userAddress: walletAddress,
+            slippage
+          },
+          web3
+        )
+      : aggregator.fetchQuotes({
           sourceAmount,
           sourceToken,
-          destinationToken,
-          userAddress: walletAddress,
-          slippage
-        })
-        .then(response => setQuotes(addMarkupToQuotes(response)));
+          destinationToken
+        });
+
+    try {
+      await quotesPromise.then(response =>
+        setQuotes(addMarkupToQuotes(response))
+      );
     } catch (e) {
       setFetchingQuotes(false);
       setErrorFetchingQuotes(e.message);
@@ -96,6 +124,99 @@ function App() {
   }
 
   const tokenSymbols = tokens.map(t => t.symbol);
+
+  const columns = [
+    {
+      property: "aggregator",
+      primary: true,
+      header: "Aggregator"
+    },
+    {
+      property: "destinationAmount",
+      header: "Return Amount",
+      sortable: true,
+      render: datum => {
+        return datum.error ? (
+          "N/A"
+        ) : (
+          <Text>
+            {getDisplayAmountFromAtomicAmount(
+              datum.destinationAmount,
+              datum.destinationToken,
+              tokens
+            )}{" "}
+            {_.get(
+              tokens.find(t => datum.destinationToken === t.address),
+              "symbol"
+            )}
+          </Text>
+        );
+      }
+    },
+    {
+      property: "fetchTime",
+      header: "Fetch Time (s)",
+      render: datum => {
+        return datum.error ? "N/A" : <Text>{datum.fetchTime / 1000}</Text>;
+      }
+    },
+    {
+      property: "markup",
+      header: "Markup",
+      render: datum => {
+        return datum.error ? "N/A" : <Text>{datum.markup}</Text>;
+      }
+    },
+    {
+      property: "action",
+      header: "Action",
+      render: datum => {
+        if (!sufficientBalance) {
+          return datum.error ? (
+            <Text size="xsmall">{datum.error.message}</Text>
+          ) : (
+            "Insufficient Balance"
+          );
+        }
+        return datum.error ? (
+          <Text size="xsmall">{datum.error.message}</Text>
+        ) : (
+          <>
+            {datum.approvalNeeded ? (
+              <TransactionButton
+                transactionFn={async () => {
+                  const approvalTx = await datum.approvalNeeded();
+                  const approvalPromise = approvalTx.wait();
+                  approvalPromise.then(() => fetchQuotes());
+                  return approvalPromise;
+                }}
+                label="Approve Token"
+              />
+            ) : (
+              <TransactionButton
+                label="Trade"
+                transactionFn={async () => {
+                  const { gasPrice } = await gas.getGasSettingsForTransaction(
+                    "fastest"
+                  );
+                  const txObject = {
+                    from: walletAddress,
+                    to: datum.to,
+                    value: datum.value,
+                    data: datum.data,
+                    gas: 1500000,
+                    gasPrice
+                  };
+                  const result = await web3.eth.sendTransaction(txObject);
+                  return result;
+                }}
+              />
+            )}
+          </>
+        );
+      }
+    }
+  ];
 
   return (
     <Box pad="large" justify="center" direction="row">
@@ -176,80 +297,7 @@ function App() {
               data={_.sortBy(quotes, ({ destinationAmount }) =>
                 Number(destinationAmount)
               ).reverse()}
-              columns={[
-                {
-                  property: "aggregator",
-                  primary: true,
-                  header: "Aggregator"
-                },
-                {
-                  property: "destinationAmount",
-                  header: "Return Amount",
-                  sortable: true,
-                  render: datum => {
-                    return datum.error ? (
-                      "N/A"
-                    ) : (
-                      <Text>
-                        {getDisplayAmountFromAtomicAmount(
-                          datum.destinationAmount,
-                          datum.destinationToken,
-                          tokens
-                        )}{" "}
-                        {_.get(
-                          tokens.find(
-                            t => datum.destinationToken === t.address
-                          ),
-                          "symbol"
-                        )}
-                      </Text>
-                    );
-                  }
-                },
-                {
-                  property: "fetchTime",
-                  header: "Fetch Time (s)",
-                  render: datum => {
-                    return datum.error ? (
-                      "N/A"
-                    ) : (
-                      <Text>{datum.fetchTime / 1000}</Text>
-                    );
-                  }
-                },
-                {
-                  property: "markup",
-                  header: "Markup",
-                  render: datum => {
-                    return datum.error ? "N/A" : <Text>{datum.markup}</Text>;
-                  }
-                },
-                {
-                  property: "action",
-                  header: "Action",
-                  render: datum => {
-                    return datum.error ? (
-                      <Text size="xsmall">{datum.error.message}</Text>
-                    ) : (
-                      <Button
-                        onClick={() => {
-                          const txObject = {
-                            from: walletAddress,
-                            to: datum.to,
-                            value: datum.value,
-                            data: datum.data
-                          };
-                          web3.eth
-                            .sendTransaction(txObject)
-                            .then(resp => console.log(resp))
-                            .catch(resp => console.log(resp));
-                        }}
-                        label="Trade"
-                      />
-                    );
-                  }
-                }
-              ]}
+              columns={columns}
               sortable
             />
           ) : null}

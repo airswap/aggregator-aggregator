@@ -1,9 +1,12 @@
+import { checkApproval, approveToken } from "airswap.js/src/erc20";
+import * as ethers from "ethers";
+import { getContractAddressesForChainOrThrow } from "@0x/contract-addresses";
 import _ from "lodash";
 import Paraswap from "./paraswap";
 import OneInch from "./oneInch";
 import Totle from "./totle";
 import Dexag from "./dexag";
-// import ZeroEx from "./ZeroEx";
+import ZeroEx from "./ZeroEx";
 
 import {
   QuoteRequest,
@@ -41,8 +44,8 @@ class AggregatorAggregator {
       paraswap: new Paraswap(this.network),
       oneInch: new OneInch(this.network),
       totle: new Totle(this.network),
-      dexag: new Dexag(this.network)
-      // zeroEx: new ZeroEx(this.network)
+      dexag: new Dexag(this.network),
+      zeroEx: new ZeroEx(this.network)
     };
     this.tokensReady = this.processTokensReadyPromises();
   }
@@ -79,23 +82,23 @@ class AggregatorAggregator {
     const tokens = await this.aggregators[aggKey].tokensReady;
 
     if (!_.find(tokens, { address: sourceToken })) {
-      if (aggKey === "totle") {
-        debugger;
-      }
       throw new Error(`Source token not supported`);
     } else if (!_.find(tokens, { address: destinationToken })) {
       throw new Error(`Destination token not supported`);
     }
   }
-  async fetchTrades({
-    sourceToken,
-    destinationToken,
-    sourceAmount,
-    userAddress,
-    slippage
-  }: TradeRequest): Promise<AggregatedTradeResponse[]> {
+  async fetchTrades(
+    {
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      userAddress,
+      slippage
+    }: TradeRequest,
+    web3
+  ): Promise<AggregatedTradeResponse[]> {
     const keys = Object.keys(this.aggregators);
-    return Promise.all(
+    const trades = await Promise.all(
       keys.map(async aggKey => {
         const startTime = Date.now();
         let quote;
@@ -142,6 +145,37 @@ class AggregatorAggregator {
         };
       })
     );
+    const approvals = await this.checkApprovals(trades, web3);
+
+    return trades.map((trade, i) => ({
+      ...trade,
+      approvalNeeded: approvals[i]
+    }));
+  }
+  async checkApprovals(trades, web3) {
+    const provider = new ethers.providers.Web3Provider(web3.currentProvider);
+    const signer = provider.getSigner();
+    const approvalsNeeded = await Promise.all(
+      trades.map(async trade => {
+        const spender =
+          trade.aggregator === "zeroEx"
+            ? getContractAddressesForChainOrThrow(1).erc20Proxy
+            : trade.to;
+
+        const isApproved = await checkApproval(
+          trade.sourceToken,
+          spender,
+          signer
+        );
+
+        if (!isApproved) {
+          return () => approveToken(trade.sourceToken, spender, signer);
+        } else {
+          return null;
+        }
+      })
+    );
+    return approvalsNeeded;
   }
   async fetchQuotes({
     sourceToken,

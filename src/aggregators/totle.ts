@@ -117,6 +117,26 @@ function buildTotleRequest({
   };
 }
 
+function buildTotleQuoteRequest({
+  sourceToken,
+  destinationToken,
+  sourceAmount,
+  includeTransaction
+}) {
+  return {
+    swap: {
+      sourceAsset: sourceToken,
+      destinationAsset: destinationToken,
+      sourceAmount: sourceAmount,
+      maxMarketSlippagePercent: "10",
+      maxExecutionSlippagePercent: "3"
+    },
+    config: {
+      transactions: includeTransaction
+    }
+  };
+}
+
 class Totle {
   tokensReady: Promise<Token[]>;
   constructor(network: number) {
@@ -136,6 +156,24 @@ class Totle {
     }));
   }
   async _fetchTotleQuote({
+    sourceToken,
+    destinationToken,
+    sourceAmount,
+    includeTransaction
+  }: TotleQuoteRequest): Promise<TotleQuote> {
+    return await axios
+      .post(
+        "https://api.totle.com/swap",
+        buildTotleQuoteRequest({
+          sourceToken,
+          destinationToken,
+          sourceAmount,
+          includeTransaction
+        })
+      )
+      .then(resp => resp.data);
+  }
+  async _fetchTotleTrade({
     sourceToken,
     destinationToken,
     sourceAmount,
@@ -182,7 +220,7 @@ class Totle {
     userAddress,
     slippage
   }: TradeRequest): Promise<TradeResponse> {
-    const quote: TotleQuote = await this._fetchTotleQuote({
+    const quote: TotleQuote = await this._fetchTotleTrade({
       sourceToken,
       destinationToken,
       sourceAmount,

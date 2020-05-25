@@ -1,6 +1,11 @@
 import axios from "axios";
 import qs from "query-string";
-import { QuoteRequest, QuoteResponse } from "./types";
+import {
+  QuoteRequest,
+  QuoteResponse,
+  TradeRequest,
+  TradeResponse
+} from "./types";
 
 const ZERO_EX_BASE_URL = "https://api.0x.org";
 
@@ -78,6 +83,37 @@ class ZeroEx {
         error
       };
     }
+  }
+  async fetchTrade({
+    sourceToken,
+    destinationToken,
+    sourceAmount,
+    userAddress,
+    slippage
+  }: TradeRequest): Promise<TradeResponse> {
+    const queryString = qs.stringify({
+      sellToken: sourceToken,
+      buyToken: destinationToken,
+      sellAmount: sourceAmount,
+      // takerAddress: userAddress,
+      slippagePercentage: slippage / 100 // 0x defines slippage as a decimal between 0 and 1
+    });
+    const quote: ZeroExQuote = await axios
+      .get(`${ZERO_EX_BASE_URL}/swap/v0/quote?${queryString}`)
+      .then(resp => resp.data);
+
+    const { to, data, value } = quote;
+
+    return {
+      sourceToken,
+      destinationToken,
+      sourceAmount,
+      destinationAmount: quote.buyAmount,
+      from: userAddress,
+      to,
+      data,
+      value
+    };
   }
 }
 

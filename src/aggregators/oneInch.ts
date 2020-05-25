@@ -92,10 +92,11 @@ class OneInch {
       disableEstimate: true
     };
     const quote: OneInchSwapQuote = await axios
-      .get(`${ONE_INCH_BASE_URL}/swap?${qs.stringify(query)}`)
+      .get(`${ONE_INCH_BASE_URL}/swapQuote?${qs.stringify(query)}`)
       .then(resp => resp.data);
 
     const { to, data, value, toTokenAmount } = quote;
+
     return {
       sourceToken,
       destinationToken,
