@@ -95,6 +95,7 @@ function App() {
     );
     const sufficientBalance = Number(balanceFormatted) >= Number(fromAmount);
     setSufficientBalance(sufficientBalance);
+    debugger;
     const quotesPromise = sufficientBalance
       ? aggregator.fetchTrades(
           {

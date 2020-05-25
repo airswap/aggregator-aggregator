@@ -1,6 +1,8 @@
 import bn from "bignumber.js";
 import { QuoteResponse } from "./aggregators/types";
 
+bn.config({ EXPONENTIAL_AT: 1e9 });
+
 export function getTokenAddressFromSymbol(tokenSymbol, tokens) {
   return tokens.find(({ symbol }) => symbol === tokenSymbol).address;
 }
