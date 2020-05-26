@@ -13,6 +13,8 @@ There are two ways the lib can be used, to fetch quotes, and to fetch trades.
 - Quotes are just prices. They don't require a web3 instance, or a wallet address, and they can be used for price discovery for arbitrarily large amounts.
 - Trades are executable. They require a web3 provider and slippage parameters to be set. 
 
+[Usage flow for the library can be found here](https://whimsical.com/9k6H6KV8fXZ5vF3uSKAFJw)
+
 This is the syntax for fetching quotes:
 ```javascript
 aggregator.fetchQuotes({
