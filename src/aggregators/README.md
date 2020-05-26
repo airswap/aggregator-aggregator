@@ -1,5 +1,9 @@
 # Aggregator Aggregator Lib
 
+## Demo application
+
+A demo application that utilizes this library [can be found here](https://codesandbox.io/s/agg-agg-il5md)
+
 ## Usage
 Usage of the aggregator lib is as follows. A new instance is created by passing in the network id to the constructor.
 ```javascript
