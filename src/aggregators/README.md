@@ -60,4 +60,8 @@ web3.eth.sendTransaction(txObject);
 
 ```
 
+## Usage notes
+- Since ETH itself is not a token, an address must be chosen to represent it as an asset. Some aggregators choose `0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` and some choose `0x0000000000000000000000000000000000000000`. This library uses `0x0000000000000000000000000000000000000000`, and translates to the appropriate representation for the aggregator when making a request.
+- Each aggregator has a different method of approving the end user's ERC20 balance. Many utilize an ERC20 proxy that handles the authorizations. That's why it's important to use the libraries built-in approval checks instead of manually checking the `trade.to` address for the spender approval.
 
+This library is a work in progress. Feel free to pull it down, and play with it. But it is liable to have significant breaking changes. The future plan is to implement it as a module which can be installed through NPM.
